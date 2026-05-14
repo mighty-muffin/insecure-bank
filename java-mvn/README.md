@@ -1,4 +1,4 @@
-# Insecure Bank (java)
+# Insecure Bank (java-mvn)
 
 ## Running the application locally
 
@@ -16,9 +16,9 @@ mvn cargo:run
 1. Build and run the application with Docker.
 
 ```bash
-docker build -t insecure-bank-java .
-docker run -p 8080:8080 -d --name insecure-bank-java insecure-bank-java
-docker logs insecure-bank-java
+docker build -t insecure-bank-java-mvn .
+docker run -p 8080:8080 -d --name insecure-bank-java-mvn insecure-bank-java-mvn
+docker logs insecure-bank-java-mvn
 ```
 
 2. Open the application in > <http://localhost:8080/insecure-bank>

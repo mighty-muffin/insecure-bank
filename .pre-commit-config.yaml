@@ -27,11 +27,6 @@ repos:
     hooks:
       - id: identity
         name: "meta | pre-commit hooks"
-  - repo: https://github.com/gitguardian/ggshield
-    rev: v1.50.4
-    hooks:
-      - id: ggshield
-        name: "security | ggshield: scan for secrets"
   - repo: https://github.com/commitizen-tools/commitizen
     rev: v4.16.0
     hooks:

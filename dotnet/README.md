@@ -1,4 +1,4 @@
-# Insecure Bank (.NET Core)
+# Insecure Bank (dotnet)
 
 ## Running the application locally
 
@@ -16,9 +16,9 @@ dotnet run
 1. Build and run the application with Docker.
 
 ```bash
-docker build -t insecure-bank-net .
-docker run -p 5000:80 -d --name insecure-bank-net insecure-bank-net
-docker logs insecure-bank-net
+docker build -t insecure-bank-dotnet .
+docker run -p 5000:80 -d --name insecure-bank-dotnet insecure-bank-dotnet
+docker logs insecure-bank-dotnet
 ```
 
 Open the application here: <http://localhost:5000>

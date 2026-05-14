@@ -17,12 +17,9 @@ python src/manage.py runserver
 1. Build and run the application with Docker.
 
 ```bash
-docker build \
-  --build-arg GIT_COMMIT=$(git rev-parse --short HEAD) \
-  --build-arg REPO_URL=$(git config --get remote.origin.url | sed 's/git@/https:\/\//; s/.com:/.com\//; s/\.git$//') \
-  --file Dockerfile --no-cache --tag insecure-bank-py .
-docker run insecure-bank-py --detach --publish 8000:8000 --name insecure-bank-py
-docker logs insecure-bank-py
+docker build -t insecure-bank-python .
+docker run -p 8000:8000 -d --name insecure-bank-python insecure-bank-python
+docker logs insecure-bank-python
 ```
 
 2. Open the application here: <http://localhost:8000>
