@@ -5,11 +5,9 @@
 
 PROJECTS := python js dotnet java-mvn
 
-.PHONY: help all setup build test lint docker \
-        $(addprefix python-,  setup build test lint run docker docker-build docker-run docker-clean) \
-        $(addprefix js-,      setup build test lint run docker docker-build docker-run docker-clean) \
-        $(addprefix dotnet-,  setup build test lint run docker docker-build docker-run docker-clean) \
-        $(addprefix java-mvn-,setup build test lint run docker docker-build docker-run docker-clean)
+# Only declare combined targets as .PHONY — declaring per-project pattern targets
+# (e.g. js-build) here would create empty explicit rules that shadow the js-% patterns.
+.PHONY: help all setup build test lint docker
 
 help:
 	@echo "Insecure Bank Monorepo"
