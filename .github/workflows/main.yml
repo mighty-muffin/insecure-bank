@@ -1,0 +1,417 @@
+---
+name: CI - Main
+run-name: Continuous Integration on ${{ github.head_ref || github.ref_name }} by ${{ github.actor }}
+
+on: # yamllint disable-line rule:truthy
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - 'README.md'
+      - 'docs/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+  pull-requests: write
+
+jobs:
+
+  pre-commit:
+    name: Pre-Commit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Run Pre-Commit Checks
+        uses: j178/prek-action@9d6a3097e0c1865ecce00cfb89fe80f2ee91b547 # v1.0.12
+        env:
+          SKIP: "pytest, uv-export"
+
+  secret:
+    needs:
+      - pre-commit
+    name: Secret Scanning
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+  changes:
+    needs:
+      - pre-commit
+    name: Detect Changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      python: ${{ steps.filter.outputs.python }}
+      js: ${{ steps.filter.outputs.js }}
+      dotnet: ${{ steps.filter.outputs.dotnet }}
+      java: ${{ steps.filter.outputs.java }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Filter paths
+        id: filter
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68ced8c # v3.0.2
+        with:
+          filters: |
+            python:
+              - 'python/**'
+            js:
+              - 'js/**'
+            dotnet:
+              - 'dotnet/**'
+            java:
+              - 'java-mvn/**'
+
+  # ── Python ────────────────────────────────────────────────────────────────
+
+  python_build:
+    needs:
+      - changes
+    if: needs.changes.outputs.python == 'true'
+    name: Python - Build & Test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: python
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install UV
+        uses: astral-sh/setup-uv@61cb8a9741eeb8a550a1b8544337180c0fc8476b # v7.2.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: "python/uv.lock"
+          version: 0.9.18
+
+      - name: Setup Python 3.10
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev --frozen
+
+      - name: Run Playwright install
+        run: uv run playwright install --with-deps
+
+      - name: Run tests
+        run: uv run pytest
+
+      - name: Minimize UV cache
+        run: uv cache prune --ci
+
+  python_docker:
+    needs:
+      - python_build
+      - changes
+    if: needs.changes.outputs.python == 'true'
+    name: Python - Container Build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    outputs:
+      image-tag: ${{ steps.image-tag.outputs.image-tag }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4.0.0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
+
+      - name: Login to GHCR
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker meta
+        id: docker_meta
+        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6.0.0
+        with:
+          images: ghcr.io/${{ github.repository }}/python
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}},priority=100
+            type=sha,value={{sha}},enable={{is_default_branch}},priority=300
+
+      - name: Docker Build & Push
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
+        with:
+          context: ./python
+          file: ./python/Dockerfile
+          push: true
+          tags: ${{ steps.docker_meta.outputs.tags }}
+          labels: ${{ steps.docker_meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            GIT_COMMIT=${{ github.sha }}
+            REPO_URL=${{ github.server_url }}/${{ github.repository }}
+
+      - name: Output image tag
+        id: image-tag
+        run: echo "image-tag=${{ steps.docker_meta.outputs.version }}" >> "$GITHUB_OUTPUT"
+
+  # ── JavaScript ────────────────────────────────────────────────────────────
+
+  js_build:
+    needs:
+      - changes
+    if: needs.changes.outputs.js == 'true'
+    name: JS - Build & Lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: js
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d592c72f74c981cd06a2 # v4.4.0
+        with:
+          node-version: "18"
+          cache: npm
+          cache-dependency-path: js/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint:check
+
+      - name: Format check
+        run: npm run format:check
+
+  js_docker:
+    needs:
+      - js_build
+      - changes
+    if: needs.changes.outputs.js == 'true'
+    name: JS - Container Build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
+
+      - name: Login to GHCR
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker meta
+        id: docker_meta
+        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6.0.0
+        with:
+          images: ghcr.io/${{ github.repository }}/js
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}},priority=100
+            type=sha,value={{sha}},enable={{is_default_branch}},priority=300
+
+      - name: Docker Build & Push
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
+        with:
+          context: ./js
+          file: ./js/Dockerfile
+          push: true
+          tags: ${{ steps.docker_meta.outputs.tags }}
+          labels: ${{ steps.docker_meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ── .NET ──────────────────────────────────────────────────────────────────
+
+  dotnet_build:
+    needs:
+      - changes
+    if: needs.changes.outputs.dotnet == 'true'
+    name: .NET - Build & Test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: dotnet
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@67a3573c9a986a3f9cfa4bf8eadf0d2a15b69ca6 # v4.3.1
+        with:
+          dotnet-version: "3.1.x"
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --no-restore --configuration Release
+
+  dotnet_docker:
+    needs:
+      - dotnet_build
+      - changes
+    if: needs.changes.outputs.dotnet == 'true'
+    name: .NET - Container Build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
+
+      - name: Login to GHCR
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker meta
+        id: docker_meta
+        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6.0.0
+        with:
+          images: ghcr.io/${{ github.repository }}/dotnet
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}},priority=100
+            type=sha,value={{sha}},enable={{is_default_branch}},priority=300
+
+      - name: Docker Build & Push
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
+        with:
+          context: ./dotnet
+          file: ./dotnet/Dockerfile
+          push: true
+          tags: ${{ steps.docker_meta.outputs.tags }}
+          labels: ${{ steps.docker_meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ── Java ──────────────────────────────────────────────────────────────────
+
+  java_docker:
+    needs:
+      - changes
+    if: needs.changes.outputs.java == 'true'
+    name: Java - Container Build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
+
+      - name: Login to GHCR
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker meta
+        id: docker_meta
+        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6.0.0
+        with:
+          images: ghcr.io/${{ github.repository }}/java
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}},priority=100
+            type=sha,value={{sha}},enable={{is_default_branch}},priority=300
+
+      - name: Docker Build & Push
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
+        with:
+          context: ./java-mvn
+          file: ./java-mvn/Dockerfile
+          push: true
+          tags: ${{ steps.docker_meta.outputs.tags }}
+          labels: ${{ steps.docker_meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ── Security scans (triggered on any project change) ──────────────────────
+
+  code_scan:
+    needs:
+      - pre-commit
+    name: Vulnerabilities Scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Run SAST Scan
+        run: |
+          echo Run SAST
+          echo "::warning::Must implement a code scanning mechanism."
+
+      - name: Run SCA Scan
+        run: |
+          echo Run SCA
+          echo "::warning::Must implement a dependencies scanning mechanism."
+
+  # ── Gate ──────────────────────────────────────────────────────────────────
+
+  gating:
+    needs:
+      - secret
+      - changes
+      - python_build
+      - python_docker
+      - js_build
+      - js_docker
+      - dotnet_build
+      - dotnet_docker
+      - java_docker
+      - code_scan
+    if: always()
+    name: Gating
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+
+    steps:
+      - name: Check all required jobs
+        run: |
+          results='${{ toJSON(needs.*.result) }}'
+          echo "Job results: $results"
+          if echo "$results" | grep -qE '"(failure|cancelled)"'; then
+            echo "One or more required jobs failed or were cancelled."
+            exit 1
+          fi
+          echo "All jobs passed or were intentionally skipped."

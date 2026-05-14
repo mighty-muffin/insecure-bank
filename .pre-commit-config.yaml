@@ -1,0 +1,84 @@
+---
+# pre-commit install --allow-missing-config
+# pre-commit autoupdate
+# pre-commit run --all-files --color auto
+exclude: |
+  (?x)^(
+    \.pre-commit-config\.yaml$|
+    # dotnet JSON files use C#-style comments and trailing commas (not strict JSON)
+    dotnet/Properties/launchSettings\.json$|
+    dotnet/appsettings.*\.json$|
+    # java-mvn .github/workflows are orphaned — excluded from YAML linting
+    java-mvn/\.github/.*$|
+    # subproject markdown is governed by each project's own pre-commit config
+    python/.*\.md$|
+    js/.*\.md$|
+    dotnet/.*\.md$|
+    java-mvn/.*\.md$
+  )
+fail_fast: true
+default_stages:
+  - pre-commit
+default_install_hook_types:
+  - commit-msg
+  - pre-commit
+repos:
+  - repo: meta
+    hooks:
+      - id: identity
+        name: "meta | pre-commit hooks"
+  - repo: https://github.com/gitguardian/ggshield
+    rev: v1.50.4
+    hooks:
+      - id: ggshield
+        name: "security | ggshield: scan for secrets"
+  - repo: https://github.com/commitizen-tools/commitizen
+    rev: v4.16.0
+    hooks:
+      - id: commitizen
+        name: "commitizen | validate commit messages"
+        stages:
+          - commit-msg
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-added-large-files
+        name: "git | block large files"
+        args: [--maxkb=2048]
+      - id: check-json
+        name: "general | check JSON files"
+      - id: end-of-file-fixer
+        name: "general | fix end of file"
+      - id: mixed-line-ending
+        name: "general | fix line ending"
+        args:
+          - --fix=auto
+      - id: trailing-whitespace
+        name: "general | remove trailing whitespace"
+      - id: pretty-format-json
+        name: "general | prettify JSON files"
+        args:
+          - --autofix
+          - --no-ensure-ascii
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.48.0
+    hooks:
+      - id: markdownlint
+        name: "md | lint: run markdownlint-cli"
+        args:
+          - --config
+          - .config/.markdown-lint.yml
+        exclude: |
+          (?x)(
+            ^README\.md$|
+            ^\.github/
+          )
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.38.0
+    hooks:
+      - id: yamllint
+        name: "yaml | lint: run yamllint"
+        args:
+          - -c
+          - .config/.yaml-lint.yml
+    

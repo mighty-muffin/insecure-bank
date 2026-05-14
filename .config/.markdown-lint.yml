@@ -1,0 +1,13 @@
+---
+# markdownlint configuration for the monorepo root
+# Only root-level Markdown is linted here; each subproject
+# (python/, js/, dotnet/, java-mvn/) manages its own Markdown.
+
+default: true
+
+# Line length — relax to match the project's 128-char code style
+MD013:
+  line_length: 128
+  # Ignore code blocks and tables (often contain long lines)
+  code_blocks: false
+  tables: false

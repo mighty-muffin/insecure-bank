@@ -1,0 +1,14 @@
+---
+# yamllint configuration for the monorepo root
+extends: default
+
+rules:
+  # Allow long lines in CI workflows and complex YAML
+  line-length:
+    max: 160
+    level: warning
+
+  # GitHub Actions uses `on` as a key which yamllint flags as truthy
+  truthy:
+    allowed-values: ["true", "false", "on", "off"]
+    check-keys: false
