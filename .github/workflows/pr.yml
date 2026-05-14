@@ -54,7 +54,7 @@ jobs:
 
       - name: GitGuardian scan
         id: ggshield_scan
-        uses: GitGuardian/ggshield/actions/secret@edac2af7a4c4670e24600482e6ae0b3e2bb52160 # v1.45.0
+        uses: GitGuardian/ggshield/actions/secret@4d84f4b8446d7d3543ee184af0a47f80a76ca476 # v1.50.4
         env:
           GITHUB_PUSH_BEFORE_SHA: ${{ github.event.before }}
           GITHUB_PUSH_BASE_SHA: ${{ github.event.base }}
