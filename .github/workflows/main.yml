@@ -234,6 +234,7 @@ jobs:
     needs:
       - changes
       - dotnet_build
+      - java_build
       - js_build
       - python_build
       - secret
