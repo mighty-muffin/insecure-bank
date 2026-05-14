@@ -17,7 +17,7 @@ dependencies = [
 dev = [
     "build==0.10.0",
     "click==8.1.6",
-    "packaging==23.1",
+    "packaging==26.2",
     "pathspec==0.11.2",
     "pip-tools==7.2.0",
     "platformdirs==3.10.0",
