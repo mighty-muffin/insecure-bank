@@ -1,0 +1,122 @@
+---
+name: CD - Deploy
+run-name: Continuous Deployment triggered by ${{ github.actor }}
+
+on: # yamllint disable-line rule:truthy
+  workflow_run:
+    workflows:
+      - "CI - Main"
+    types:
+      - completed
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+
+  # ── Python ────────────────────────────────────────────────────────────────
+
+  python_deploy:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    name: Python - Deploy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment:
+      name: Staging
+      url: http://localhost:8000
+
+    steps:
+      - name: Deploy Python application
+        run: |
+          echo "Deploying Python insecure-bank..."
+          sleep 5
+
+      - name: Health check
+        run: |
+          curl --fail --retry 5 --retry-delay 10 http://localhost:8000/health || \
+            echo "::warning::Health check endpoint not reachable (expected in stub deploy)."
+        shell: bash
+
+  # ── JavaScript ────────────────────────────────────────────────────────────
+
+  js_deploy:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    name: JS - Deploy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment:
+      name: Staging
+      url: http://localhost:3000
+
+    steps:
+      - name: Deploy JS application
+        run: |
+          echo "Deploying JS insecure-bank..."
+          sleep 5
+
+      - name: Health check
+        run: |
+          curl --fail --retry 5 --retry-delay 10 http://localhost:3000/health || \
+            echo "::warning::Health check endpoint not reachable (expected in stub deploy)."
+        shell: bash
+
+  # ── .NET ──────────────────────────────────────────────────────────────────
+
+  dotnet_deploy:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    name: .NET - Deploy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment:
+      name: Staging
+      url: http://localhost:5000
+
+    steps:
+      - name: Deploy .NET application
+        run: |
+          echo "Deploying .NET insecure-bank..."
+          sleep 5
+
+      - name: Health check
+        run: |
+          curl --fail --retry 5 --retry-delay 10 http://localhost:5000/health || \
+            echo "::warning::Health check endpoint not reachable (expected in stub deploy)."
+        shell: bash
+
+  # ── Java ──────────────────────────────────────────────────────────────────
+
+  java_deploy:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    name: Java - Deploy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment:
+      name: Production
+      url: https://bank.mighty-muffin.io
+
+    steps:
+      - name: Setup SSH agent
+        uses: webfactory/ssh-agent@dc588b651fe13675774614f8e6a936a468676387 # v0.9.1
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Deploy via SSH
+        run: |
+          ssh -o StrictHostKeyChecking=no \
+            ${{ secrets.USERNAME }}@${{ secrets.HOST }} \
+            "docker version && docker pull ghcr.io/${{ github.repository }}/java:latest && \
+             docker stop java-bank || true && \
+             docker rm java-bank || true && \
+             docker run -d --name java-bank --restart unless-stopped \
+               -p 8080:8080 ghcr.io/${{ github.repository }}/java:latest"
+        shell: bash
+
+      - name: Health check
+        run: |
+          curl --fail --retry 10 --retry-delay 15 ${{ vars.JAVA_APP_URL }}
+        shell: bash

@@ -51,6 +51,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      - name: GitGuardian scan
+        id: ggshield_scan
+        uses: GitGuardian/ggshield/actions/secret@edac2af7a4c4670e24600482e6ae0b3e2bb52160 # v1.45.0
+        env:
+          GITHUB_PUSH_BEFORE_SHA: ${{ github.event.before }}
+          GITHUB_PUSH_BASE_SHA: ${{ github.event.base }}
+          GITHUB_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          GITGUARDIAN_API_KEY: ${{ secrets.GITGUARDIAN_API_KEY }}
+        continue-on-error: true
+
+      - name: Check status of potentially failing step and issue warning
+        if: steps.ggshield_scan.outcome == 'failure'
+        run: |
+          echo "::error::The previous step detected potential secrets in the code. Please review the scan report above."
+        shell: bash
+
   changes:
     needs:
       - pre-commit
@@ -287,29 +303,6 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # ── Security scans ────────────────────────────────────────────────────────
-
-  code_scan:
-    needs:
-      - pre-commit
-    name: Vulnerabilities Scan
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - name: Run SAST
-        run: |
-          echo Run SAST
-          echo "::warning::Must implement a code scanning mechanism."
-
-      - name: Run SCA
-        run: |
-          echo Run SCA
-          echo "::warning::Must implement a dependencies scanning mechanism."
-
   # ── Gate ──────────────────────────────────────────────────────────────────
 
   gating:
@@ -323,7 +316,6 @@ jobs:
       - dotnet_build
       - dotnet_docker
       - java_docker
-      - code_scan
     if: always()
     name: Gating
     runs-on: ubuntu-24.04
