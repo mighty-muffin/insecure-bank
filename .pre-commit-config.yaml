@@ -28,7 +28,7 @@ repos:
       - id: identity
         name: "meta | pre-commit hooks"
   - repo: https://github.com/commitizen-tools/commitizen
-    rev: v4.16.0
+    rev: v4.17.0
     hooks:
       - id: commitizen
         name: "commitizen | validate commit messages"
